@@ -11,14 +11,25 @@ use nitrogen::DriverContext;
 use nitrogen::virtio::gpu::VirtioGpu;
 use petroleum::graphics::UefiFramebufferWriter;
 
-use crate::driver_context_impl::KernelDriverContext;
 
 /// Complete VirtIO-GPU initialisation: probe → queue → display → renderer.
 ///
 /// Returns the GPU handle and the framebuffer renderer on success,
 /// or `None` if any step fails (caller falls back to GOP/VGA).
 pub fn init() -> Option<(Box<VirtioGpu>, UefiFramebufferWriter)> {
-    let ctx = KernelDriverContext;
+    struct _Ctx;
+impl nitrogen::DriverContext for _Ctx {
+    fn phys_to_virt(&self, p: u64) -> usize { crate::ctx::phys_to_virt(p) }
+    fn allocate_frame(&self) -> Result<u64, nitrogen::DriverContextError> { crate::ctx::allocate_frame() }
+    fn allocate_contiguous_frames(&self, c: usize) -> Result<u64, nitrogen::DriverContextError> { crate::ctx::allocate_contiguous(c) }
+    fn map_mmio_region(&self, p: usize, v: usize, s: usize) -> Result<(), nitrogen::DriverContextError> { crate::ctx::map_mmio(p, v, s) }
+    fn map_page(&self, v: usize, p: usize, f: nitrogen::PageFlags) -> Result<(), nitrogen::DriverContextError> { crate::ctx::map_page(v, p, f) }
+    fn free_frame(&self, p: u64) { crate::ctx::free_frame(p) }
+    fn free_contiguous_frames(&self, p: u64, c: usize) { crate::ctx::free_contiguous(p, c) }
+    fn dma_map(&self, id: u16, p: u64, s: usize) -> Result<u64, nitrogen::DriverContextError> { crate::ctx::iommu_dma_map(id, p, s) }
+    fn dma_unmap(&self, i: u64, s: usize) { crate::ctx::iommu_dma_unmap(i, s) }
+}
+    let ctx = _Ctx;
     let off = petroleum::common::memory::get_physical_memory_offset() as u64;
 
     // 1. Hardware-level init (PCI probe, BAR mapping, queues)

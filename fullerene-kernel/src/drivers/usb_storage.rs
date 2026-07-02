@@ -68,8 +68,19 @@ pub fn init() {
 
     // Create and initialise the USB context.
     {
-        use crate::driver_context_impl::KernelDriverContext;
-        let mut ctx = USBContext::new(&KernelDriverContext);
+        struct UsbDriverCtx;
+        impl nitrogen::DriverContext for UsbDriverCtx {
+            fn phys_to_virt(&self, p: u64) -> usize { crate::ctx::phys_to_virt(p) }
+            fn allocate_frame(&self) -> Result<u64, nitrogen::DriverContextError> { crate::ctx::allocate_frame() }
+            fn allocate_contiguous_frames(&self, c: usize) -> Result<u64, nitrogen::DriverContextError> { crate::ctx::allocate_contiguous(c) }
+            fn map_mmio_region(&self, p: usize, v: usize, s: usize) -> Result<(), nitrogen::DriverContextError> { crate::ctx::map_mmio(p, v, s) }
+            fn map_page(&self, v: usize, p: usize, f: nitrogen::PageFlags) -> Result<(), nitrogen::DriverContextError> { crate::ctx::map_page(v, p, f) }
+            fn free_frame(&self, p: u64) { crate::ctx::free_frame(p) }
+            fn free_contiguous_frames(&self, p: u64, c: usize) { crate::ctx::free_contiguous(p, c) }
+            fn dma_map(&self, id: u16, p: u64, s: usize) -> Result<u64, nitrogen::DriverContextError> { crate::ctx::iommu_dma_map(id, p, s) }
+            fn dma_unmap(&self, i: u64, s: usize) { crate::ctx::iommu_dma_unmap(i, s) }
+        }
+        let mut ctx = USBContext::new(&UsbDriverCtx);
 
         let init_ok = ctx.enable();
         klog_fmt!("USB init: ctx.enable() = {:?}\n", init_ok);
@@ -148,8 +159,19 @@ pub fn poll_usb_all() -> bool {
     USB_DRIVE_COUNT.store(0, Ordering::Relaxed);
 
     // Re-create the USB context (full re-scan)
-    use crate::driver_context_impl::KernelDriverContext;
-    let mut ctx = USBContext::new(&KernelDriverContext);
+    struct UsbRescanCtx;
+    impl nitrogen::DriverContext for UsbRescanCtx {
+        fn phys_to_virt(&self, p: u64) -> usize { crate::ctx::phys_to_virt(p) }
+        fn allocate_frame(&self) -> Result<u64, nitrogen::DriverContextError> { crate::ctx::allocate_frame() }
+        fn allocate_contiguous_frames(&self, c: usize) -> Result<u64, nitrogen::DriverContextError> { crate::ctx::allocate_contiguous(c) }
+        fn map_mmio_region(&self, p: usize, v: usize, s: usize) -> Result<(), nitrogen::DriverContextError> { crate::ctx::map_mmio(p, v, s) }
+        fn map_page(&self, v: usize, p: usize, f: nitrogen::PageFlags) -> Result<(), nitrogen::DriverContextError> { crate::ctx::map_page(v, p, f) }
+        fn free_frame(&self, p: u64) { crate::ctx::free_frame(p) }
+        fn free_contiguous_frames(&self, p: u64, c: usize) { crate::ctx::free_contiguous(p, c) }
+        fn dma_map(&self, id: u16, p: u64, s: usize) -> Result<u64, nitrogen::DriverContextError> { crate::ctx::iommu_dma_map(id, p, s) }
+        fn dma_unmap(&self, i: u64, s: usize) { crate::ctx::iommu_dma_unmap(i, s) }
+    }
+    let mut ctx = USBContext::new(&UsbRescanCtx);
     let _ = ctx.enable();
     {
         let mut guard = USB_CTX.lock();

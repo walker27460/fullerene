@@ -3,6 +3,7 @@
 #![feature(abi_x86_interrupt)]
 #![cfg_attr(not(test), feature(alloc_error_handler))]
 extern crate alloc;
+extern crate core;
 
 // ---- Custom panic handler (replaces petroleum::define_panic_handler!) ----
 #[cfg(all(any(target_os = "none", target_os = "uefi"), not(test)))]
@@ -41,8 +42,14 @@ pub mod apps;
 // ── Drivers (storage, GPU, network) ───────────────────────────────
 pub mod drivers;
 
-// ── DriverContext bridge (kernel → nitrogen) ──────────────────────
-pub mod driver_context_impl;
+// ── C-compatible driver API (extern "C" FFI) ──────────────────────
+pub mod ffi;
+
+// ── Kernel init context (generic DriverContext) ───────────────────
+pub mod ctx;
+
+// ── Driver plugin registry ────────────────────────────────────────
+pub mod plugin;
 
 // ── Kernel core ────────────────────────────────────────────────────
 pub mod boot;

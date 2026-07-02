@@ -56,8 +56,21 @@ impl BlockDevice for SdBlockDev {
 /// Phase 1: safe PCI-config probe (port I/O only).
 /// Called during kernel init.  Never touches MMIO.
 pub fn init() {
-    use crate::driver_context_impl::KernelDriverContext;
-    nitrogen::storage::rtsx::init(&KernelDriverContext);
+    /// Context for RTSX init.
+    struct SdCtx { device_id: u16 }
+    impl SdCtx { const fn new(d: u16) -> Self { Self { device_id: d } } }
+    impl nitrogen::DriverContext for SdCtx {
+        fn phys_to_virt(&self, p: u64) -> usize { crate::ctx::phys_to_virt(p) }
+        fn allocate_frame(&self) -> Result<u64, nitrogen::DriverContextError> { crate::ctx::allocate_frame() }
+        fn allocate_contiguous_frames(&self, c: usize) -> Result<u64, nitrogen::DriverContextError> { crate::ctx::allocate_contiguous(c) }
+        fn map_mmio_region(&self, p: usize, v: usize, s: usize) -> Result<(), nitrogen::DriverContextError> { crate::ctx::map_mmio(p, v, s) }
+        fn map_page(&self, v: usize, p: usize, f: nitrogen::PageFlags) -> Result<(), nitrogen::DriverContextError> { crate::ctx::map_page(v, p, f) }
+        fn free_frame(&self, p: u64) { crate::ctx::free_frame(p) }
+        fn free_contiguous_frames(&self, p: u64, c: usize) { crate::ctx::free_contiguous(p, c) }
+        fn dma_map(&self, _: u16, p: u64, s: usize) -> Result<u64, nitrogen::DriverContextError> { crate::ctx::iommu_dma_map(self.device_id, p, s) }
+        fn dma_unmap(&self, i: u64, s: usize) { crate::ctx::iommu_dma_unmap(i, s) }
+    }
+    nitrogen::storage::rtsx::init(&SdCtx::new(0));
 
     if nitrogen::storage::rtsx::is_present() {
         klog_fmt!("SD card: controller found, card init deferred\n");
