@@ -76,7 +76,8 @@ pub fn scheduler_loop() -> ! {
     let mut tick_counter: u64 = 0;
     loop {
         // VDSO: process pending syscall requests from user processes
-        vdso::poll_all_vdso_rings();
+        // VDSO ring-buffer processing removed — replaced by direct-function VDSO
+        // vdso::poll_all_vdso_rings();
 
         // VDSO: update time metadata for all processes
         let now_us = if solvent::get_tsc_per_ms() > 0 {
@@ -85,7 +86,8 @@ pub fn scheduler_loop() -> ! {
         } else {
             crate::interrupts::TICK_COUNTER.load(core::sync::atomic::Ordering::Relaxed)
         };
-        vdso::update_vdso_metadata(now_us, now_us);
+        // VDSO metadata update removed — replaced by direct-function VDSO
+        // vdso::update_vdso_metadata(now_us, now_us);
 
         gui::runtime_tick(tick_counter);
 

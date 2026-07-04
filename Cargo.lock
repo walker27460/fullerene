@@ -407,6 +407,7 @@ dependencies = [
  "solvent",
  "spin 0.10.0",
  "static_assertions",
+ "vdso",
  "volatile 0.6.1",
  "x86_64",
 ]
@@ -1101,6 +1102,10 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "vdso"
+version = "0.1.0"
 
 [[package]]
 name = "volatile"

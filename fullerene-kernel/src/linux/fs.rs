@@ -31,31 +31,9 @@ pub fn sys_read(rt: &mut LinuxRuntime, args: &[u64; 6]) -> u64 {
     if count == 0 {
         return 0;
     }
-    // Stdin: read from keyboard
-    if fd == 0 {
-        if buf == 0 {
-            return errno_code(EFAULT);
-        }
-        let count_min = count.min(512);
-        // Single byte reads are most common for terminal input
-        if count == 1 {
-            if let Some(ch) = nitrogen::ps2::keyboard::read_char() {
-                if unsafe { copy_to_user(buf, &[ch]) }.is_err() {
-                    return errno_code(EFAULT);
-                }
-                return 1;
-            }
-            return 0;
-        }
-        // Multi-byte: drain line buffer into a kernel buffer, then copy to user
-        let mut kernel_buf = [0u8; 512];
-        let n = nitrogen::ps2::keyboard::drain_line_buffer(&mut kernel_buf[..count_min]);
-        if n > 0 {
-            if unsafe { copy_to_user(buf, &kernel_buf[..n]) }.is_err() {
-                return errno_code(EFAULT);
-            }
-        }
-        return n as u64;
+    // Stdin: read from keyboard (PS/2 driver removed — stub)
+            if fd == 0 {
+                // No keyboard input available without PS/2 driver
     }
     // Stdout/stderr: write to serial
     if fd == 1 || fd == 2 {

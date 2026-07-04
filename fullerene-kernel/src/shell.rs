@@ -40,7 +40,7 @@ fn read_entire_file(path: &str) -> Result<alloc::vec::Vec<u8>, &'static str> {
 
 /// Initialize the shell subsystem (formerly keyboard init, etc.)
 pub fn init() {
-    nitrogen::ps2::keyboard::init_keyboard();
+    // PS/2 keyboard init removed with nitrogen::ps2
     register_nozzle_hooks();
     petroleum::serial::serial_log(format_args!("Shell/CLI initialized\n"));
 }
@@ -357,37 +357,8 @@ fn register_nozzle_hooks() {
                 crate::klog::write_to(|s| ctx.terminal.write_str(s));
                 ctx.terminal.write_str("\n=== End kernel log ===\n");
             }
-            // ── HDA diagnostic info (read via KernelContext) ──
-            {
-                let diag = crate::contexts::kernel::with_kernel(|k| k.audio.diag).unwrap_or(
-                    nitrogen::hda::controller::HdaDiagInfo {
-                        gcap: 0,
-                        gcap64: false,
-                        corb_phys: 0,
-                        rirb_phys: 0,
-                        states_after_crst: 0,
-                        populated: false,
-                    },
-                );
-                if diag.populated {
-                    ctx.terminal.write_str("\n=== HDA diagnostic ===\n");
-                    let line = alloc::format!(
-                        "GCAP: 0x{:08x}  (64-bit: {})\nCORB phys: 0x{:016x}\nRIRB phys: 0x{:016x}\nSTATESTS after CRST: 0x{:04x} (SDIN0={})\n",
-                        diag.gcap,
-                        if diag.gcap64 { "YES" } else { "NO" },
-                        diag.corb_phys,
-                        diag.rirb_phys,
-                        diag.states_after_crst,
-                        if diag.states_after_crst & 0x0001 != 0 {
-                            1u8
-                        } else {
-                            0u8
-                        },
-                    );
-                    ctx.terminal.write_str(&line);
-                    ctx.terminal.write_str("=== End HDA diagnostic ===\n");
-                }
-            }
+            // ── HDA diagnostic info (driver removed) ──
+            // HDA controller was removed from nitrogen — stub
             ctx.terminal.write_str("\n=== Kernel trace buffer ===\n");
             let events = crate::tracing::snapshot();
             if events.is_empty() {
@@ -697,7 +668,8 @@ impl nozzle::Terminal for KernelTerminal {
     }
 
     fn input_available(&self) -> bool {
-        nitrogen::ps2::keyboard::input_available()
+        // PS/2 keyboard removed — stub
+        false
     }
 }
 

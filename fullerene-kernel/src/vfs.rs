@@ -11,6 +11,8 @@ use genome::fs::FsError;
 
 pub use genome::vfs::{FileDescriptor, FileSystem, InodeType, MemFileSystem, VNode, Vfs};
 
+pub mod devfs;
+
 // ── Public API — delegated to VfsContext ────────────────────────
 
 pub fn init() {

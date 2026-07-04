@@ -1,10 +1,7 @@
 //! APIC (Advanced Programmable Interrupt Controller) handling
 //!
 //! This module provides APIC initialization and management functions.
-//! All unsafe volatile/port I/O is encapsulated in `nitrogen::apic_controller::ApicController`.
 
-use nitrogen::apic::{ApicFlags, ApicOffsets, IO_APIC_BASE};
-use nitrogen::apic_controller::ApicController;
 use petroleum::common::utils::reset_mutex_lock;
 use spin::Mutex;
 use x86_64::registers::model_specific::Msr;

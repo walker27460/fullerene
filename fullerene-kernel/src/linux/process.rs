@@ -109,7 +109,8 @@ pub fn sys_clone(rt: &mut LinuxRuntime, args: &[u64; 6]) -> u64 {
                 return errno_code(ENOMEM);
             }
         };
-        let vdso = crate::vdso::create_vdso_page(&mut child_pt, fa, child_pid.0);
+        // VDSO mapped by ELF loader — no per-process allocation
+        let vdso = Ok(());
         drop(fa_lock);
         match vdso {
             Ok(v) => Some(v),

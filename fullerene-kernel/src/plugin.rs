@@ -1,58 +1,38 @@
-//! Registry of per-device [`DriverContext`] trait objects.
+//! Plugin registry — tracks registered driver plugins.
 //!
-//! The kernel creates a [`KernelContext`] per PCI device (or reuses
-//! the shared `&KernelContext` for infrastructure) and registers it
-//! here so subsystems can enumerate active driver contexts for power
-//! management, device enumeration, and diagnostics.
-//!
-//! # Example
-//!
-//! ```ignore
-//! // Register a driver context:
-//! static NVME_CTX: KernelContext = KernelContext;
-//! crate::plugin::PluginRegistry::register(&NVME_CTX);
-//!
-//! // Iterate all registered contexts:
-//! for ctx in PluginRegistry::iter() {
-//!     let _: &dyn DriverContext = ctx;
-//! }
-//! ```
-//!
-//! [`KernelContext`]: crate::ctx::KernelContext
+//! Each driver plugin registers at initialisation time.  The registry
+//! provides a simple iteration interface for kernel subsystems.
 
 use alloc::vec::Vec;
-use nitrogen::DriverContext;
 use spin::Mutex;
 
-/// A registry of [`DriverContext`] objects.
-///
-/// Each driver plugin registers its context at initialisation time.
-/// The registry provides a simple iteration interface for kernel
-/// subsystems that need to operate on all active contexts.
+/// A registered driver plugin entry.
+pub struct PluginEntry {
+    pub name: &'static str,
+}
+
+/// A registry of plugin entries.
 pub struct PluginRegistry {
-    contexts: Vec<&'static dyn DriverContext>,
+    entries: Vec<PluginEntry>,
 }
 
 impl PluginRegistry {
-    /// Register a driver context.
-    ///
-    /// The context must be a `'static` reference — typically a
-    /// `static` item in the driver module, or `&KernelContext`.
-    pub fn register(ctx: &'static dyn DriverContext) {
-        REGISTRY.lock().contexts.push(ctx);
+    /// Register a plugin by name.
+    pub fn register(name: &'static str) {
+        REGISTRY.lock().entries.push(PluginEntry { name });
     }
 
-    /// Iterate over all registered driver contexts.
-    pub fn iter() -> alloc::vec::IntoIter<&'static dyn DriverContext> {
-        REGISTRY.lock().contexts.clone().into_iter()
+    /// Iterate over all registered plugins.
+    pub fn iter() -> alloc::vec::IntoIter<PluginEntry> {
+        REGISTRY.lock().entries.clone().into_iter()
     }
 
-    /// Number of registered driver contexts.
+    /// Number of registered plugins.
     pub fn count() -> usize {
-        REGISTRY.lock().contexts.len()
+        REGISTRY.lock().entries.len()
     }
 }
 
 static REGISTRY: Mutex<PluginRegistry> = Mutex::new(PluginRegistry {
-    contexts: Vec::new(),
+    entries: Vec::new(),
 });

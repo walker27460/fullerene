@@ -18,22 +18,16 @@ macro_rules! define_input_interrupt_handler {
     };
 }
 
-// Keyboard interrupt handler
-//
-// Reads one byte from the PS/2 data port and feeds it to the Nitrogen
-// PS/2 keyboard driver for scancode processing.  The driver handles
-// scancode-to-ASCII conversion, modifier keys, and input buffering.
-define_input_interrupt_handler!(keyboard_handler, 0x60, |scancode: u8| {
-    nitrogen::ps2::keyboard::handle_keyboard_scancode(scancode);
+// Keyboard interrupt handler — stub
+// PS/2 keyboard driver was removed from nitrogen.
+define_input_interrupt_handler!(keyboard_handler, 0x60, |_scancode: u8| {
+    // no-op — PS/2 keyboard driver removed
 });
 
-// Mouse interrupt handler
-//
-// Reads one byte from the PS/2 data port and feeds it to the Nitrogen
-// PS/2 mouse driver for packet processing.  No manual packet parsing
-// is performed here – the driver handles that with proper validation.
-define_input_interrupt_handler!(mouse_handler, 0x60, |byte: u8| {
-    nitrogen::ps2::mouse::handle_mouse_data(byte);
+// Mouse interrupt handler — stub
+// PS/2 mouse driver was removed from nitrogen.
+define_input_interrupt_handler!(mouse_handler, 0x60, |_byte: u8| {
+    // no-op — PS/2 mouse driver removed
 });
 
 /// Timer interrupt handler (no preemption - scheduler loop handles yielding)

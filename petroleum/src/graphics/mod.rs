@@ -63,9 +63,6 @@ pub trait Console: core::fmt::Write {
     fn scroll(&mut self);
 }
 
-pub mod virtio_gpu;
-pub use virtio_gpu::VirtioGpuFramebuffer;
-
 pub mod color;
 pub mod constants;
 pub mod framebuffer;

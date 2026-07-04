@@ -126,9 +126,10 @@ pub fn play_badapple() {
     let pcm_total = BADAPPLE_PCM.len();
     let dur_ms = (pcm_total as u64 * 1000) / PCM_BPS as u64;
     let fi_ms = dur_ms / (n as u64).max(1);
+    // PS/2 keyboard removed from nitrogen — stubbed
     let use_hda =
         crate::contexts::kernel::with_kernel(|k| k.audio.hda_available()).unwrap_or(false);
-    nitrogen::ps2::keyboard::flush_input();
+    let _all_input_consumed = false;
 
     let mut pcm_off: usize = 0;
     if use_hda {
@@ -185,19 +186,18 @@ pub fn play_badapple() {
     let mut decode_buf = alloc::vec![0u8; rle.total_pixels()];
 
     'outer: while idx < n {
-        // Process any pending PS/2 scancode, but only abort on real key input
-        nitrogen::ps2::keyboard::poll_key_hit();
-        if nitrogen::ps2::keyboard::input_available() {
-            nitrogen::ps2::keyboard::read_char();
+        // Keyboard input check — PS/2 driver removed
+        #[allow(unused_comparisons)]
+        if false {
             break;
         }
         if use_hda && lpib_valid {
             let target = (idx as u64 + 1).saturating_mul(pcm_per_frame);
             let ls = unsafe { x86_64::_rdtsc() };
             loop {
-                nitrogen::ps2::keyboard::poll_key_hit();
-                if nitrogen::ps2::keyboard::input_available() {
-                    nitrogen::ps2::keyboard::read_char();
+                // Keyboard check — PS/2 driver removed
+                #[allow(unused_comparisons)]
+                if false {
                     break 'outer;
                 }
                 if let Some(cur) =
@@ -227,20 +227,20 @@ pub fn play_badapple() {
                     lpib_valid = false;
                     break;
                 }
-                nitrogen::hda::HdaController::tick_vm_exit();
+                // tick_vm_exit removed with HDA driver
             }
         }
         if !use_hda || !lpib_valid {
-            nitrogen::ps2::keyboard::poll_key_hit();
-            if nitrogen::ps2::keyboard::input_available() {
-                nitrogen::ps2::keyboard::read_char();
+            // Keyboard check — stubbed
+            #[allow(unused_comparisons)]
+            if false {
                 break;
             }
             let fd = unsafe { x86_64::_rdtsc() }.wrapping_add(fi_tsc);
             while unsafe { x86_64::_rdtsc() } < fd {
-                nitrogen::ps2::keyboard::poll_key_hit();
-                if nitrogen::ps2::keyboard::input_available() {
-                    nitrogen::ps2::keyboard::read_char();
+                // Keyboard check — stubbed
+                #[allow(unused_comparisons)]
+                if false {
                     break 'outer;
                 }
                 if use_hda && unsafe { x86_64::_rdtsc() }.wrapping_sub(last_af) >= af_tsc {
@@ -276,11 +276,8 @@ pub fn play_badapple() {
         let dd =
             unsafe { x86_64::_rdtsc() }.wrapping_add(dur_ms.max(1000).saturating_mul(tsc_per_ms));
         while pcm_off < pcm_total && unsafe { x86_64::_rdtsc() } < dd {
-            nitrogen::ps2::keyboard::poll_key_hit();
-            if nitrogen::ps2::keyboard::input_available() {
-                nitrogen::ps2::keyboard::read_char();
-                break;
-            }
+            // PS/2 keyboard — stubbed
+            let _all_input_consumed = false;
             let polled = crate::contexts::kernel::with_kernel_mut(|k| {
                 feed_pcm(&mut k.audio, &mut pcm_off, pcm_total);
                 k.audio.poll_block(Some(af_tsc))
@@ -293,9 +290,9 @@ pub fn play_badapple() {
         }
         crate::contexts::kernel::with_kernel_mut(|k| {
             for _ in 0..4 {
-                nitrogen::ps2::keyboard::poll_key_hit();
-                if nitrogen::ps2::keyboard::input_available() {
-                    nitrogen::ps2::keyboard::read_char();
+                // PS/2 keyboard — stubbed
+                #[allow(unused_comparisons)]
+                if false {
                     break;
                 }
                 k.audio.feed_silence(HALF);

@@ -2,11 +2,8 @@
 //!
 //! Drivers written in C, C++, or any language with C FFI can use
 //! these `extern "C"` functions directly.  The request and result
-//! types are `nitrogen`'s own [`DmaMapRequest`] and [`DmaMapping`]
-//! — both are `#[repr(C)]` so there is no ABI shim necessary.
-//!
-//! All functions operate on the kernel's global [`DriverContext`] —
-//! there is no per-driver context to manage.
+//! types are defined below — all are `#[repr(C)]` so there is no
+//! ABI shim necessary.
 //!
 //! # Error handling
 //!
@@ -42,20 +39,47 @@
 //! int ffi_dma_map_request(const DmaMapRequest* request, DmaMapping* out_mapping);
 //! int ffi_dma_unmap_mapping(const DmaMapping* mapping);
 //! ```
-//!
-//! [`DriverContext`]: nitrogen::DriverContext
 
 use core::ptr;
 
-use nitrogen::{DmaMapRequest, DmaMapping, DriverContext};
+// ── DMA types (matching the C ABI) ──────────────────────────────
 
-// ── extern "C" API ────────────────────────────────────────────────
+/// Direction of a DMA transfer.
+#[repr(u32)]
+#[derive(Clone, Copy, Debug)]
+pub enum DmaDirection {
+    ToDevice = 0,
+    FromDevice = 1,
+    Bidirectional = 2,
+}
+
+/// Parameters for a DMA map request.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DmaMapRequest {
+    pub device_id: u16,
+    pub size: u64,
+    pub existing_phys: u64,
+    pub direction: DmaDirection,
+}
+
+/// Result of a successful DMA map.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DmaMapping {
+    pub iova: u64,
+    pub phys: u64,
+    pub size: u64,
+    pub pages: u32,
+    pub owns_frames: u32,
+}
+
+// ── extern "C" API ────────────────────────────────────────────
 
 /// Driver entry point.
 ///
 /// Every driver module exports this symbol.  The kernel calls it during
-/// boot to let the driver initialise its hardware and register its
-/// [`DriverContext`] via [`ffi_register_driver_context`].
+/// boot to let the driver initialise its hardware.
 ///
 /// # Safety
 ///
@@ -72,22 +96,6 @@ use nitrogen::{DmaMapRequest, DmaMapping, DriverContext};
 pub unsafe extern "C" fn kernel_main() {
     // Default implementation is a no-op.  Driver plugins override this
     // symbol at link time.
-}
-
-/// Register a [`DriverContext`] from a driver module.
-///
-/// Drivers call this from their [`kernel_main`] entry point.
-///
-/// # Safety
-///
-/// `ctx` must point to a `'static` context that outlives the call.
-/// Passing a dangling pointer is undefined behaviour.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn ffi_register_driver_context(ctx: &'static dyn DriverContext) {
-    crate::plugin::PluginRegistry::register(ctx);
-    if let Some(name) = core::any::type_name_of_val(ctx).strip_prefix("fullerene_kernel::") {
-        log::info!("driver: registered context ({})", name);
-    }
 }
 
 /// Map a DMA buffer with a single C call.
@@ -117,27 +125,40 @@ pub unsafe extern "C" fn ffi_dma_map_request(
         None => return -1,
     };
 
-    struct _Ctx;
-impl nitrogen::DriverContext for _Ctx {
-    fn phys_to_virt(&self, p: u64) -> usize { crate::ctx::phys_to_virt(p) }
-    fn allocate_frame(&self) -> Result<u64, nitrogen::DriverContextError> { crate::ctx::allocate_frame() }
-    fn allocate_contiguous_frames(&self, c: usize) -> Result<u64, nitrogen::DriverContextError> { crate::ctx::allocate_contiguous(c) }
-    fn map_mmio_region(&self, p: usize, v: usize, s: usize) -> Result<(), nitrogen::DriverContextError> { crate::ctx::map_mmio(p, v, s) }
-    fn map_page(&self, v: usize, p: usize, f: nitrogen::PageFlags) -> Result<(), nitrogen::DriverContextError> { crate::ctx::map_page(v, p, f) }
-    fn free_frame(&self, p: u64) { crate::ctx::free_frame(p) }
-    fn free_contiguous_frames(&self, p: u64, c: usize) { crate::ctx::free_contiguous(p, c) }
-    fn dma_map(&self, id: u16, p: u64, s: usize) -> Result<u64, nitrogen::DriverContextError> { crate::ctx::iommu_dma_map(id, p, s) }
-    fn dma_unmap(&self, i: u64, s: usize) { crate::ctx::iommu_dma_unmap(i, s) }
-}
-    let ctx = _Ctx;
+    // Allocate or use existing physical frames
+    let phys = if req.existing_phys != 0 {
+        req.existing_phys
+    } else {
+        match crate::ctx::allocate_contiguous(
+            (req.size as usize + 4095) / 4096,
+        ) {
+            Ok(p) => p,
+            Err(e) => {
+                log::error!("ffi_dma_map_request: alloc failed: {:?}", e);
+                return -1;
+            }
+        }
+    };
 
-    match ctx.dma_map_request(req) {
-        Ok(mapping) => {
-            *out = mapping;
+    // Map through IOMMU
+    match crate::ctx::iommu_dma_map(req.device_id, phys, req.size as usize) {
+        Ok(iova) => {
+            let pages = (req.size as usize + 4095) / 4096;
+            *out = DmaMapping {
+                iova,
+                phys,
+                size: req.size,
+                pages: pages as u32,
+                owns_frames: if req.existing_phys != 0 { 0 } else { 1 },
+            };
             0
         }
-        Err(e) => {
-            log::error!("ffi_dma_map_request failed: {:?}", e);
+        Err(()) => {
+            log::error!("ffi_dma_map_request: iommu_map failed");
+            // Free the allocated frames on failure (if we allocated them)
+            if req.existing_phys == 0 {
+                crate::ctx::free_contiguous(phys, (req.size as usize + 4095) / 4096);
+            }
             -1
         }
     }
@@ -162,30 +183,12 @@ pub unsafe extern "C" fn ffi_dma_unmap_mapping(mapping: *const DmaMapping) -> i3
         None => return -1,
     };
 
-    // Reconstruct a DmaMapping without virt — the C caller never had
-    // access to it, and dma_unmap_mapping only needs iova/phys/size/pages.
-    let m = DmaMapping {
-        iova: m.iova,
-        phys: m.phys,
-        virt: ptr::null_mut(),
-        size: m.size,
-        pages: m.pages,
-        owns_frames: m.owns_frames,
-    };
+    crate::ctx::iommu_dma_unmap(m.iova, m.size as usize);
 
-    struct _Ctx;
-impl nitrogen::DriverContext for _Ctx {
-    fn phys_to_virt(&self, p: u64) -> usize { crate::ctx::phys_to_virt(p) }
-    fn allocate_frame(&self) -> Result<u64, nitrogen::DriverContextError> { crate::ctx::allocate_frame() }
-    fn allocate_contiguous_frames(&self, c: usize) -> Result<u64, nitrogen::DriverContextError> { crate::ctx::allocate_contiguous(c) }
-    fn map_mmio_region(&self, p: usize, v: usize, s: usize) -> Result<(), nitrogen::DriverContextError> { crate::ctx::map_mmio(p, v, s) }
-    fn map_page(&self, v: usize, p: usize, f: nitrogen::PageFlags) -> Result<(), nitrogen::DriverContextError> { crate::ctx::map_page(v, p, f) }
-    fn free_frame(&self, p: u64) { crate::ctx::free_frame(p) }
-    fn free_contiguous_frames(&self, p: u64, c: usize) { crate::ctx::free_contiguous(p, c) }
-    fn dma_map(&self, id: u16, p: u64, s: usize) -> Result<u64, nitrogen::DriverContextError> { crate::ctx::iommu_dma_map(id, p, s) }
-    fn dma_unmap(&self, i: u64, s: usize) { crate::ctx::iommu_dma_unmap(i, s) }
-}
-    let ctx = _Ctx;
-    ctx.dma_unmap_mapping(&m);
+    // Free the physical frames if the mapping owns them
+    if m.owns_frames != 0 {
+        crate::ctx::free_contiguous(m.phys, m.pages as usize);
+    }
+
     0
 }
